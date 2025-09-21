@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B2B Risk Scoring — Prepay Calculator (RU)</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #111111;
+      --muted: #666666;
+      --border: #e5e7eb;
+      --card: #fafafa;
+      --accent: #111111;
+      --danger: #dc2626;
+      --rose-200: #fecdd3;
+      --rose-900: #881337;
+      --amber-200: #fde68a;
+      --amber-900: #78350f;
+      --ring: #111111;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0b0b0b; --fg:#f4f4f5; --muted:#a1a1aa; --border:#262626; --card:#141414; --accent:#f4f4f5; --danger:#ef4444; --ring:#f4f4f5; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg); font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+    .container { max-width: 1120px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 0; }
+    p.muted { color: var(--muted); margin: 0; }
+
+    .row { display: grid; gap: 12px; }
+    @media (min-width: 800px) { .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; } .row.cols-2 { grid-template-columns: 1fr 1fr; } }
+
+    input[type="text"], select, button { outline: none; }
+    input[type="text"], select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--fg); }
+    input[type="text"]:focus, select:focus { box-shadow: 0 0 0 2px var(--ring) inset; }
+
+    .btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: var(--fg); cursor: pointer; }
+    .btn:hover { background: rgba(127,127,127,0.06); }
+    .btn:disabled { opacity: .5; cursor: default; }
+
+    .card { border: 1px solid var(--border); border-radius: 16px; background: var(--card); padding: 14px; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .badge-hard { background: var(--danger); color: #fff; }
+    .badge-red { background: var(--rose-200); color: var(--rose-900); }
+    .badge-amber { background: var(--amber-200); color: var(--amber-900); }
+
+    .list { display: grid; gap: 8px; }
+    .item { display:flex; gap:12px; padding: 12px; border:1px solid var(--border); border-radius: 12px; background: var(--bg); align-items:flex-start; }
+    .item:hover { background: rgba(127,127,127,0.06); }
+    .item input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); }
+    .item.on { border-color: var(--accent); }
+    .meta { display:flex; flex-wrap: wrap; gap: 8px; align-items:center; }
+    .muted-small { color: var(--muted); font-size: 12px; }
+
+    .result-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; }
+    .hard-flag { padding: 6px 10px; border-radius: 12px; font-weight: 700; }
+    .hard-on { background: var(--danger); color: #fff; }
+    .hard-off { background: #e5e7eb; color: #111; }
+    @media (prefers-color-scheme: dark) { .hard-off { background:#262626; color:#e5e7eb; } }
+
+    .prepay { font-size: 28px; font-weight: 800; letter-spacing: .5px; }
+
+    .msg { background: rgba(127,127,127,0.08); border-radius: 12px; padding: 10px; }
+
+    .flex { display:flex; gap: 8px; align-items:center; }
+    .flex-split { display:flex; gap: 8px; align-items:center; justify-content:space-between; }
+    .right { text-align:right; }
+
+    .stepper { display:inline-flex; align-items:center; gap:8px; }
+    .stepper .slot { width: 36px; text-align:center; font-variant-numeric: tabular-nums; }
+
+    .footer { margin-top: 24px; padding-top: 12px; border-top:1px solid var(--border); color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="flex-split" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h1>Признаки рискованных клиентов в B2B‑проектах</h1>
+        <p class="muted">Отметьте чекбоксами признаки, видимые на первом контакте. Система рассчитает Индекс Риска (IR) и процент предоплаты по методике.</p>
+      </div>
+      <div class="flex" style="flex-wrap:wrap;">
+        <button class="btn" id="btnSmoke">Прогнать smoke‑тесты</button>
+        <button class="btn" id="btnReset" title="Сбросить выбор и фильтры">Сброс</button>
+      </div>
+    </header>
+
+    <!-- Controls -->
+    <section class="row cols-3" style="margin-bottom:12px;">
+      <div class="col-span-2">
+        <input id="search" type="text" placeholder="Поиск по номеру/тексту/категории…" />
+      </div>
+      <div class="flex" style="justify-content:flex-start;">
+        <label class="muted" style="font-size:13px;">Фильтр серьёзности:&nbsp;</label>
+        <select id="sevFilter">
+          <option value="ALL">Все</option>
+          <option value="HARD">Hard RED</option>
+          <option value="RED">RED</option>
+          <option value="AMBER">AMBER</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="row cols-2" style="margin-bottom:16px;">
+      <div class="flex">
+        <input id="nonres" type="checkbox" />
+        <label for="nonres">Клиент нерезидент и не может платить в рублях (исключение для п.5)</label>
+      </div>
+      <div class="flex" style="justify-content:flex-end;">
+        <span class="muted" style="font-size:13px;">MINOR‑флаги (до 2):</span>
+        <div class="stepper">
+          <button class="btn" id="minorMinus">−</button>
+          <div class="slot" id="minorVal">0</div>
+          <button class="btn" id="minorPlus">+</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Result Panel -->
+    <section class="card" style="margin-bottom:16px;">
+      <div class="result-bar">
+        <div class="flex" style="flex-wrap:wrap;">
+          <span class="pill">IR: <strong id="ir" style="margin-left:6px; font-variant-numeric: tabular-nums;">0</strong></span>
+          <span class="pill">Hard RED: <strong id="cntHard" style="margin-left:6px; font-variant-numeric: tabular-nums;">0</strong></span>
+          <span class="pill">RED: <strong id="cntRed" style="margin-left:6px; font-variant-numeric: tabular-nums;">0</strong></span>
+          <span class="pill">AMBER: <strong id="cntAmber" style="margin-left:6px; font-variant-numeric: tabular-nums;">0</strong></span>
+          <span class="pill">MINOR: <strong id="cntMinor" style="margin-left:6px; font-variant-numeric: tabular-nums;">0</strong></span>
+        </div>
+        <div class="flex">
+          <div id="hardFlag" class="hard-flag hard-off">Hard RED не активен</div>
+          <div class="prepay" id="prepay">30%</div>
+        </div>
+      </div>
+
+      <div class="row cols-3" style="margin-top:10px;">
+        <button class="btn" id="btnCopyMsg">Скопировать сообщение для клиента</button>
+        <button class="btn" id="btnExport">Экспорт JSON</button>
+        <button class="btn" id="btnCopyFlags">Скопировать номера флагов</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div class="muted-small">Шаблон уведомления:</div>
+        <div class="msg" id="msg">Мы оценили риски вашего проекта. Требуемый процент предоплаты: 30%. Без этой предоплаты проект не стартует.</div>
+      </div>
+    </section>
+
+    <!-- Lists go here -->
+    <section id="lists" class="row" style="gap:16px;"></section>
+
+    <div class="footer">
+      <div>Методика: Hard RED ⇒ 100% предоплата; иначе IR = 20×RED + 10×AMBER + 5×MINOR (≤100). Prepay% = 30 + 0.55×IR, округление к ближайшим 5%, границы 30–85%; если расчёт &gt;85% ⇒ 100%.</div>
+      <div>Исключение: п.5 (крипта) становится RED при флаге нерезидента и невозможности оплаты в рублях (при условии KYC/договора/безопасного метода).</div>
+    </div>
+  </div>
+
+  <script>
+    // ------------------------------ Data ----------------------------------
+    const CATEGORIES = {
+      FIN: 'Финансовые риски',
+      COM: 'Коммуникационные риски',
+      ORG: 'Организационные риски',
+      PROC: 'Процессные риски',
+      LEG: 'Юридические риски',
+      REP: 'Репутационные и комплаенс‑риски (первый контакт)'
+    };
+
+    const HARD_RED = new Set([1, 5, 6, 28, 29, 33]);
+    const RED = new Set([7, 8, 15, 17, 21, 31, 34]);
+    const AMBER = new Set([2,3,4,10,11,12,13,14,16,18,19,20,22,23,24,25,26,27,30,32,35]);
+
+    const ITEMS = [
+      {id:1,  cat:CATEGORIES.FIN,  t:"Постоплата без аванса. Только ‘по факту’, отказ от предоплаты.", d:"Высокий риск невыплат, затяжек и переносов платежей."},
+      {id:2,  cat:CATEGORIES.FIN,  t:"Агрессивный торг/демпинг.", d:"Систематическое выбивание скидок и давления на ставку — риск нерентабельности и конфликтов."},
+      {id:3,  cat:CATEGORIES.FIN,  t:"Скидка за будущие объемы/пиар.", d:"Обещания вместо денег сейчас — предиктор неоплаты/уступок."},
+      {id:4,  cat:CATEGORIES.FIN,  t:"Неопределённый бюджет/‘скажу позже’.", d:"Ссылки на внешние поступления — индикатор нестабильности."},
+      {id:5,  cat:CATEGORIES.FIN,  t:"Нестандартные/неофициальные способы оплаты.", d:"Бартер, наличные без документов, криптовалюта без гарантий, ‘на личную карту’."},
+      {id:6,  cat:CATEGORIES.FIN,  t:"Требование начать без предоплаты/документов.", d:"Старт ‘на доверии’ — риск невыплаты и несанкционированного использования."},
+      {id:7,  cat:CATEGORIES.FIN,  t:"‘Оплата после результата’ без критериев.", d:"Нет метрик успеха/acceptance‑критериев — споры о ‘готовности’ и задержки."},
+
+      {id:8,  cat:CATEGORIES.COM,  t:"Отказ от брифа/формулирования целей.", d:"Уклонение от вопросов о задачах/результате — бесконечное ‘вытягивание’ вводных."},
+      {id:9,  cat:CATEGORIES.COM,  t:"Размытые требования.", d:"‘Сам не знаю, что хочу’ — риск промахов и переработок."},
+      {id:10, cat:CATEGORIES.COM,  t:"Неуважение границ.", d:"Ночные звонки, ультимативные срочности — токсичный паттерн."},
+      {id:11, cat:CATEGORIES.COM,  t:"Токсичные отзывы о прошлых подрядчиках.", d:"‘Все предыдущие были плохие’ — вероятен повтор сценария."},
+      {id:12, cat:CATEGORIES.COM,  t:"Ультимативная риторика и сравнения.", d:"‘Как у X, но дешевле и быстрее’ — недоверие к экспертизе."},
+      {id:13, cat:CATEGORIES.COM,  t:"Противоречивые ответы в одном разговоре.", d:"Несовпадение цифр/сроков/ожиданий — низкая согласованность."},
+      {id:14, cat:CATEGORIES.COM,  t:"Затяжные ответы/‘пропадания’.", d:"Потеря связи на пресейле — предвестник срывов."},
+
+      {id:15, cat:CATEGORIES.ORG,  t:"Нет доступа к decision‑maker’у.", d:"Решения ‘где‑то наверху’ — согласования буксуют/откатываются."},
+      {id:16, cat:CATEGORIES.ORG,  t:"Много стейкхолдеров без ролей.", d:"Противоречивые правки, непонятно чье слово финальное."},
+      {id:17, cat:CATEGORIES.ORG,  t:"Внутренняя команда скептична/вмешивается.", d:"Трение, рост времени согласований."},
+      {id:18, cat:CATEGORIES.ORG,  t:"Хаотичные процессы, нет ответственного.", d:"Решения ‘растворяются’, дедлайны не держатся."},
+      {id:19, cat:CATEGORIES.ORG,  t:"Непрозрачность компании.", d:"Личные почты, нет сайта/реквизитов — тревожный индикатор."},
+      {id:20, cat:CATEGORIES.ORG,  t:"Несовместимость по TZ при требовании жёсткой синхронности.", d:"Критические совещания в ваше ‘ночь’ — лаги и конфликты."},
+
+      {id:21, cat:CATEGORIES.PROC, t:"Плавающий скоп.", d:"‘Это же мелочь’ без пересмотра бюджета/сроков — расширение работ."},
+      {id:22, cat:CATEGORIES.PROC, t:"Бесконечные правки.", d:"Нет финальных критериев качества/готовности — бесконечные итерации."},
+      {id:23, cat:CATEGORIES.PROC, t:"Нереалистичные сроки.", d:"‘Нужно вчера’ при большом объёме — риск качества/перегрузки."},
+      {id:24, cat:CATEGORIES.PROC, t:"Внеплановые созвоны/согласования.", d:"Попытки ‘пожарного’ управления — срыв планирования."},
+      {id:25, cat:CATEGORIES.PROC, t:"Неготовность к старту.", d:"Нет материалов/доступов/ИС — старт затягивается."},
+      {id:26, cat:CATEGORIES.PROC, t:"Недоверие к экспертизе, ранний микроменеджмент.", d:"Вмешательство в методику/инструменты — вместо делегирования."},
+      {id:27, cat:CATEGORIES.PROC, t:"Фикс‑прайс без обсуждения объёма и этапов.", d:"‘Фикс как у конкурента’ без декомпозиции — высокий риск."},
+
+      {id:28, cat:CATEGORIES.LEG,  t:"Отказ от прозрачного двустороннего договора.", d:"Односторонний шаблон/отказ фиксировать ответственность."},
+      {id:29, cat:CATEGORIES.LEG,  t:"‘Серая зона’ проекта.", d:"Нет лицензий/регистраций, просьбы нарушать ИС/использовать нелиценз. софт."},
+
+      {id:30, cat:CATEGORIES.REP,  t:"Нереалистично низкий бюджет относительно рынка.", d:"Несоответствие объёму — вероятность демпинга/доп.давления/неплатежей."},
+      {id:31, cat:CATEGORIES.REP,  t:"Требование бесплатной концепции/POC до договора и аванса.", d:"Подмена пресейла работой/получение идей без обязательств."},
+      {id:32, cat:CATEGORIES.REP,  t:"‘Конкурс’ с параллельной бесплатной работой нескольких исполнителей.", d:"Сбор идей без оплаты, непрозрачный выбор."},
+      {id:33, cat:CATEGORIES.REP,  t:"Небезопасные практики доступа уже на пресейле (доступ к исходникам в работе).", d:"Попытка получить доступы до договоренностей/оплаты."},
+      {id:34, cat:CATEGORIES.REP,  t:"Эскалация срочности до подписания договора.", d:"Требование начать ‘прямо сейчас’/‘на завтра’ без договора/предоплаты."},
+      {id:35, cat:CATEGORIES.REP,  t:"Отказ предоставить базовые референсы/кейсы или контакты предыдущих заказчиков при заявлении крупных бюджетов и срочности.", d:"Несоответствие заявлений проверяемым фактам."}
+    ];
+
+    // --------------------------- State & Helpers ----------------------------
+    const els = {
+      lists: document.getElementById('lists'),
+      search: document.getElementById('search'),
+      sevFilter: document.getElementById('sevFilter'),
+      nonres: document.getElementById('nonres'),
+      minorMinus: document.getElementById('minorMinus'),
+      minorPlus: document.getElementById('minorPlus'),
+      minorVal: document.getElementById('minorVal'),
+      ir: document.getElementById('ir'),
+      cntHard: document.getElementById('cntHard'),
+      cntRed: document.getElementById('cntRed'),
+      cntAmber: document.getElementById('cntAmber'),
+      cntMinor: document.getElementById('cntMinor'),
+      prepay: document.getElementById('prepay'),
+      hardFlag: document.getElementById('hardFlag'),
+      msg: document.getElementById('msg'),
+      btnCopyMsg: document.getElementById('btnCopyMsg'),
+      btnCopyFlags: document.getElementById('btnCopyFlags'),
+      btnExport: document.getElementById('btnExport'),
+      btnReset: document.getElementById('btnReset'),
+      btnSmoke: document.getElementById('btnSmoke')
+    };
+
+    const selected = new Set();
+    let minorCount = 0;
+
+    function baseSeverity(id){
+      if (HARD_RED.has(id)) return 'HARD';
+      if (RED.has(id)) return 'RED';
+      if (AMBER.has(id)) return 'AMBER';
+      return null;
+    }
+    function effectiveSeverity(id){
+      if (id === 5 && els.nonres.checked) return 'RED';
+      return baseSeverity(id);
+    }
+    function round5(v){ return Math.round(v/5)*5; }
+
+    function calcIR(){
+      let hard=0, red=0, amber=0;
+      for (const id of selected){
+        const sev = effectiveSeverity(id);
+        if (sev==='HARD') hard++; else if (sev==='RED') red++; else if (sev==='AMBER') amber++;
+      }
+      const minor = Math.max(0, Math.min(2, minorCount));
+      let ir = red*20 + amber*10 + minor*5;
+      if (ir>100) ir=100;
+      return {ir, counts:{hard, red, amber, minor}};
+    }
+    function calcPrepay(ir, hardTriggered){
+      if (hardTriggered) return 100;
+      const raw = 30 + 0.55*ir;
+      if (raw > 85) return 100; // safety per spec
+      const bounded = Math.min(85, Math.max(30, raw));
+      return round5(bounded);
+    }
+
+    function copyToClipboard(text){
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        return navigator.clipboard.writeText(text);
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } finally { ta.remove(); }
+      return Promise.resolve();
+    }
+
+    function buildMessage(pp){
+      return `Мы оценили риски вашего проекта. Требуемый процент предоплаты: ${pp}%. Без этой предоплаты проект не стартует.`;
+    }
+
+    // ------------------------------ Render ----------------------------------
+    function renderList(){
+      const q = els.search.value.trim().toLowerCase();
+      const f = els.sevFilter.value; // ALL|HARD|RED|AMBER
+
+      // group filtered items by category
+      const byCat = new Map();
+      for (const it of ITEMS){
+        const sev = effectiveSeverity(it.id);
+        if (f !== 'ALL' && sev !== f) continue;
+        const hay = `${it.id} ${it.t} ${it.d} ${it.cat}`.toLowerCase();
+        if (q && !hay.includes(q)) continue;
+        if (!byCat.has(it.cat)) byCat.set(it.cat, []);
+        byCat.get(it.cat).push(it);
+      }
+
+      els.lists.innerHTML = '';
+      for (const [cat, items] of byCat){
+        const box = document.createElement('div');
+        box.className = 'card';
+        const head = document.createElement('div');
+        head.className = 'flex-split';
+        head.style.marginBottom = '10px';
+        head.innerHTML = `<h2>${cat}</h2><div class="muted-small">${items.length} пункт(ов)</div>`;
+        box.appendChild(head);
+
+        const list = document.createElement('div');
+        list.className = 'list';
+        for (const it of items){
+          const checked = selected.has(it.id);
+          const wrapper = document.createElement('label');
+          wrapper.className = 'item' + (checked ? ' on' : '');
+          wrapper.htmlFor = `chk-${it.id}`;
+          const input = document.createElement('input');
+          input.type = 'checkbox'; input.id = `chk-${it.id}`; input.checked = checked;
+          input.addEventListener('change', ()=>{ toggle(it.id); });
+
+          const body = document.createElement('div'); body.style.flex = '1';
+          const meta = document.createElement('div'); meta.className = 'meta';
+          const idEl = document.createElement('div'); idEl.style.fontWeight = '700'; idEl.textContent = `${it.id})`;
+          const titleEl = document.createElement('div'); titleEl.style.fontWeight = '600'; titleEl.textContent = it.t;
+          const sev = effectiveSeverity(it.id);
+          const sevEl = document.createElement('span');
+          sevEl.className = 'badge ' + (sev==='HARD' ? 'badge-hard' : sev==='RED' ? 'badge-red' : 'badge-amber');
+          sevEl.textContent = sev==='HARD' ? 'Hard RED' : sev;
+
+          meta.appendChild(idEl); meta.appendChild(titleEl); meta.appendChild(sevEl);
+          const desc = document.createElement('div'); desc.className = 'muted-small'; desc.style.marginTop = '4px'; desc.textContent = it.d;
+
+          body.appendChild(meta); body.appendChild(desc);
+          wrapper.appendChild(input); wrapper.appendChild(body);
+          list.appendChild(wrapper);
+        }
+
+        box.appendChild(list);
+        els.lists.appendChild(box);
+      }
+    }
+
+    function toggle(id){
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      update();
+    }
+
+    function resetAll(){
+      selected.clear();
+      minorCount = 0;
+      els.minorVal.textContent = '0';
+      els.search.value = '';
+      els.sevFilter.value = 'ALL';
+      els.nonres.checked = false;
+      update();
+    }
+
+    function exportJSON(){
+      const {ir, counts} = calcIR();
+      const prepay = calcPrepay(ir, counts.hard>0);
+      const items = Array.from(selected).sort((a,b)=>a-b).map(id=>({id, severity: effectiveSeverity(id)}));
+      const payload = {
+        timestamp: new Date().toISOString(),
+        selected: items,
+        counts,
+        minorCount,
+        nonResidentCryptoException: els.nonres.checked,
+        IR: ir,
+        hardTriggered: counts.hard>0,
+        PrepayPercent: prepay,
+        message: buildMessage(prepay)
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `b2b-risk-prepay-${Date.now()}.json`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function runSmoke(){
+      const compute = (ids, nonres=false, minor=0)=>{
+        const prevSel = new Set(selected);
+        const prevNon = els.nonres.checked; const prevMinor = minorCount;
+        selected.clear(); ids.forEach(x=>selected.add(x)); els.nonres.checked = nonres; minorCount = minor;
+        const {ir, counts} = calcIR();
+        const prepay = calcPrepay(ir, counts.hard>0);
+        // restore
+        selected.clear(); prevSel.forEach(x=>selected.add(x)); els.nonres.checked = prevNon; minorCount = prevMinor; 
+        return {ir, prepay};
+      };
+
+      const results = [];
+      results.push({name:'1) Пусто', exp:{ir:0, prepay:30}, got: compute([])});
+      results.push({name:'2) Только п.1', exp:{prepay:100}, got: compute([1])});
+      results.push({name:'3) Только п.5 без исключения', exp:{prepay:100}, got: compute([5], false)});
+      results.push({name:'4) Только п.5 с исключением', exp:{ir:20, prepay:40}, got: compute([5], true)});
+      results.push({name:'5) п.2,3,4', exp:{ir:30, prepay:45}, got: compute([2,3,4])});
+      results.push({name:'6) Четыре RED', exp:{ir:80, prepay:75}, got: compute([7,8,15,17])});
+      results.push({name:'7) IR≥100 без Hard RED', exp:{ir:100, prepay:85}, got: compute([7,8,15,17,21])});
+      const lines = results.map(r=>{
+        const pass = (r.exp.ir===undefined || r.exp.ir===r.got.ir) && (r.exp.prepay===undefined || r.exp.prepay===r.got.prepay);
+        return `${pass ? '✅' : '❌'} ${r.name}\n   ожидалось: ${JSON.stringify(r.exp)}\n   получено:  ${JSON.stringify(r.got)}`;
+      });
+      alert(lines.join('\n\n'));
+    }
+
+    function update(){
+      renderList();
+      const {ir, counts} = calcIR();
+      const hardTriggered = counts.hard>0;
+      const prepay = calcPrepay(ir, hardTriggered);
+
+      els.ir.textContent = ir;
+      els.cntHard.textContent = counts.hard;
+      els.cntRed.textContent = counts.red;
+      els.cntAmber.textContent = counts.amber;
+      els.cntMinor.textContent = counts.minor;
+      els.prepay.textContent = prepay + '%';
+      els.msg.textContent = buildMessage(prepay);
+
+      els.hardFlag.textContent = hardTriggered ? '100% по Hard RED' : 'Hard RED не активен';
+      els.hardFlag.className = 'hard-flag ' + (hardTriggered ? 'hard-on' : 'hard-off');
+    }
+
+    // ------------------------------ Events ----------------------------------
+    els.search.addEventListener('input', update);
+    els.sevFilter.addEventListener('change', update);
+    els.nonres.addEventListener('change', update);
+    els.minorMinus.addEventListener('click', ()=>{ if (minorCount>0){ minorCount--; els.minorVal.textContent=String(minorCount); update(); } });
+    els.minorPlus.addEventListener('click', ()=>{ if (minorCount<2){ minorCount++; els.minorVal.textContent=String(minorCount); update(); } });
+
+    els.btnCopyMsg.addEventListener('click', ()=>copyToClipboard(els.msg.textContent).then(()=>alert('Скопировано.')).catch(()=>alert('Не удалось скопировать.')));
+    els.btnCopyFlags.addEventListener('click', ()=>{
+      const s = Array.from(selected).sort((a,b)=>a-b).join(', ');
+      copyToClipboard(s).then(()=>alert('Скопировано.')).catch(()=>alert('Не удалось скопировать.'));
+    });
+    els.btnExport.addEventListener('click', exportJSON);
+    els.btnReset.addEventListener('click', resetAll);
+    els.btnSmoke.addEventListener('click', runSmoke);
+
+    // ------------------------------ Init ------------------------------------
+    update();
+  </script>
+</body>
+</html>
